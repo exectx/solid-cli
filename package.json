@@ -13,7 +13,7 @@
 		"check": "pnpm --parallel check",
 		"dev": "rollup --config --watch",
 		"format": "pnpm --parallel format",
-		"format:templates": "prettier --write ./packages/create/templates ./packages/create/shared --config prettier.config.templates.js",
+		"format:templates": "prettier --write ./packages/create/templates ./packages/create/shared --config prettier.config.templates.js --ignore-path ./.gitignore",
 		"lint": "pnpm --parallel lint && eslint --cache --cache-location node_modules/.eslintcache",
 		"test": "vitest run --silent",
 		"test:ui": "vitest --ui"
