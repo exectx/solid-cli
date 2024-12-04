@@ -1,14 +1,5 @@
-import { Walker, type AstKinds } from '@sveltejs/ast-tooling';
-import {
-	common,
-	functions,
-	object,
-	array,
-	imports,
-	variables,
-	exports,
-	type AstTypes
-} from '../js/index.ts';
+import { Walker } from '@sveltejs/ast-tooling';
+import { common, array, imports, exports, type AstTypes } from '../js/index.ts';
 
 export function addGlobalAppInterface(
 	ast: AstTypes.Program,

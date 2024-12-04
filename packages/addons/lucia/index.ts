@@ -41,7 +41,7 @@ export default defineAddon({
 		if (!kit) unsupported('Requires SvelteKit');
 		if (!dependencyVersion('drizzle-orm')) dependsOn('drizzle');
 	},
-	run: ({ sv, typescript, options, kit, dependencyVersion }) => {
+	run: ({ sv, typescript, options, kit }) => {
 		const ext = typescript ? 'ts' : 'js';
 		const jsxExt = typescript ? 'tsx' : 'jsx';
 

@@ -1,4 +1,3 @@
-import MagicString from 'magic-string';
 import {
 	colors,
 	dedent,
@@ -14,13 +13,10 @@ import {
 	functions,
 	imports,
 	object,
-	variables,
 	exports,
-	kit as kitJs,
 	type AstTypes
 } from '@sveltejs/cli-core/js';
-import * as html from '@sveltejs/cli-core/html';
-import { parseHtml, parseJson, parseScript, parseSvelte } from '@sveltejs/cli-core/parsers';
+import { parseJson, parseScript } from '@sveltejs/cli-core/parsers';
 import { addToDemoPage } from '../common.ts';
 
 const DEFAULT_INLANG_PROJECT = {
