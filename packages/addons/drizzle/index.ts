@@ -260,11 +260,9 @@ export default defineAddon({
 		sv.file(`${kit?.libDirectory}/server/db/index.${ext}`, (content) => {
 			const { ast, generateCode } = parseScript(content);
 
-			imports.addNamed(ast, '$env/dynamic/private', { env: 'env' });
-
 			// env var checks
 			const dbURLCheck = common.statementFromString(
-				"if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');"
+				"if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');"
 			);
 			common.addStatement(ast, dbURLCheck);
 
@@ -274,7 +272,7 @@ export default defineAddon({
 				imports.addDefault(ast, 'better-sqlite3', 'Database');
 				imports.addNamed(ast, 'drizzle-orm/better-sqlite3', { drizzle: 'drizzle' });
 
-				clientExpression = common.expressionFromString('new Database(env.DATABASE_URL)');
+				clientExpression = common.expressionFromString('new Database(process.env.DATABASE_URL)');
 			}
 			if (options.sqlite === 'libsql' || options.sqlite === 'turso') {
 				imports.addNamed(ast, '@libsql/client', { createClient: 'createClient' });
@@ -284,15 +282,17 @@ export default defineAddon({
 					imports.addNamed(ast, '$app/environment', { dev: 'dev' });
 					// auth token check in prod
 					const authTokenCheck = common.statementFromString(
-						"if (!dev && !env.DATABASE_AUTH_TOKEN) throw new Error('DATABASE_AUTH_TOKEN is not set');"
+						"if (!import.meta.env.DEV && !process.env.DATABASE_AUTH_TOKEN) throw new Error('DATABASE_AUTH_TOKEN is not set');"
 					);
 					common.addStatement(ast, authTokenCheck);
 
 					clientExpression = common.expressionFromString(
-						'createClient({ url: env.DATABASE_URL, authToken: env.DATABASE_AUTH_TOKEN })'
+						'createClient({ url: process.env.DATABASE_URL, authToken: process.env.DATABASE_AUTH_TOKEN })'
 					);
 				} else {
-					clientExpression = common.expressionFromString('createClient({ url: env.DATABASE_URL })');
+					clientExpression = common.expressionFromString(
+						'createClient({ url: process.env.DATABASE_URL })'
+					);
 				}
 			}
 			// MySQL
@@ -301,27 +301,29 @@ export default defineAddon({
 				imports.addNamed(ast, 'drizzle-orm/mysql2', { drizzle: 'drizzle' });
 
 				clientExpression = common.expressionFromString(
-					'await mysql.createConnection(env.DATABASE_URL)'
+					'await mysql.createConnection(process.env.DATABASE_URL)'
 				);
 			}
 			if (options.mysql === 'planetscale') {
 				imports.addNamed(ast, '@planetscale/database', { Client: 'Client' });
 				imports.addNamed(ast, 'drizzle-orm/planetscale-serverless', { drizzle: 'drizzle' });
 
-				clientExpression = common.expressionFromString('new Client({ url: env.DATABASE_URL })');
+				clientExpression = common.expressionFromString(
+					'new Client({ url: process.env.DATABASE_URL })'
+				);
 			}
 			// PostgreSQL
 			if (options.postgresql === 'neon') {
 				imports.addNamed(ast, '@neondatabase/serverless', { neon: 'neon' });
 				imports.addNamed(ast, 'drizzle-orm/neon-http', { drizzle: 'drizzle' });
 
-				clientExpression = common.expressionFromString('neon(env.DATABASE_URL)');
+				clientExpression = common.expressionFromString('neon(process.env.DATABASE_URL)');
 			}
 			if (options.postgresql === 'postgres.js') {
 				imports.addDefault(ast, 'postgres', 'postgres');
 				imports.addNamed(ast, 'drizzle-orm/postgres-js', { drizzle: 'drizzle' });
 
-				clientExpression = common.expressionFromString('postgres(env.DATABASE_URL)');
+				clientExpression = common.expressionFromString('postgres(process.env.DATABASE_URL)');
 			}
 
 			if (!clientExpression) throw new Error('unreachable state...');

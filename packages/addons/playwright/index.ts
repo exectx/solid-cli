@@ -7,7 +7,7 @@ export default defineAddon({
 	shortDescription: 'browser testing',
 	homepage: 'https://playwright.dev',
 	options: {},
-	run: ({ sv, typescript }) => {
+	run: ({ sv, typescript, packageManager }) => {
 		const ext = typescript ? 'ts' : 'js';
 
 		sv.devDependency('@playwright/test', '^1.45.3');
@@ -17,7 +17,7 @@ export default defineAddon({
 			data.scripts ??= {};
 			const scripts: Record<string, string> = data.scripts;
 			const TEST_CMD = 'playwright test';
-			const RUN_TEST = 'npm run test:e2e';
+			const RUN_TEST = `${packageManager} run test:e2e`;
 			scripts['test:e2e'] ??= TEST_CMD;
 			scripts['test'] ??= RUN_TEST;
 			if (!scripts['test'].includes(RUN_TEST)) scripts['test'] += ` && ${RUN_TEST}`;
@@ -50,8 +50,10 @@ export default defineAddon({
 
 			const config = {
 				webServer: object.create({
-					command: common.createLiteral('npm run build && npm run preview'),
-					port: common.expressionFromString('4173')
+					command: common.createLiteral(
+						`${packageManager} run build && ${packageManager} run start`
+					),
+					port: common.expressionFromString('3000')
 				}),
 				testDir: common.createLiteral('e2e')
 			};

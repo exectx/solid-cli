@@ -1,5 +1,6 @@
 import type { OptionDefinition, OptionValues } from './options.ts';
 
+// TODO: update names from kit to start, sveltekit to solidstart
 export type Workspace<Args extends OptionDefinition> = {
 	options: OptionValues<Args>;
 	cwd: string;
@@ -13,7 +14,7 @@ export type Workspace<Args extends OptionDefinition> = {
 	 */
 	dependencyVersion: (pkg: string) => string | undefined;
 	typescript: boolean;
-	kit: { libDirectory: string; routesDirectory: string } | undefined;
+	kit: { libDirectory: string; routesDirectory: string; alias: string } | undefined;
 	packageManager: PackageManager;
 };
 

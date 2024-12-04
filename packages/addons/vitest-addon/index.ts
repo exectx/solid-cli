@@ -7,7 +7,7 @@ export default defineAddon({
 	shortDescription: 'unit testing',
 	homepage: 'https://vitest.dev',
 	options: {},
-	run: ({ sv, typescript }) => {
+	run: ({ sv, typescript, packageManager }) => {
 		const ext = typescript ? 'ts' : 'js';
 
 		sv.devDependency('vitest', '^2.0.4');
@@ -18,7 +18,8 @@ export default defineAddon({
 			const scripts: Record<string, string> = data.scripts;
 			const TEST_CMD = 'vitest';
 			// we use `--run` so that vitest doesn't run in watch mode when running `npm run test`
-			const RUN_TEST = 'npm run test:unit -- --run';
+
+			const RUN_TEST = `${packageManager} run test:unit${packageManager === 'npm' ? ' --' : ''} --run`;
 			scripts['test:unit'] ??= TEST_CMD;
 			scripts['test'] ??= RUN_TEST;
 			if (!scripts['test'].includes(RUN_TEST)) scripts['test'] += ` && ${RUN_TEST}`;
@@ -39,7 +40,7 @@ export default defineAddon({
 			`;
 		});
 
-		sv.file(`vite.config.${ext}`, (content) => {
+		sv.file(`vitest.config.${ext}`, (content) => {
 			const { ast, generateCode } = parseScript(content);
 
 			// find `defineConfig` import declaration for "vite"

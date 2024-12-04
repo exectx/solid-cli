@@ -22,7 +22,6 @@ export default defineAddon({
 
 		sv.devDependency('eslint', '^9.7.0');
 		sv.devDependency('globals', '^15.0.0');
-		sv.devDependency('eslint-plugin-svelte', '^2.36.0');
 
 		if (typescript) sv.devDependency('typescript-eslint', '^8.0.0');
 
@@ -64,9 +63,6 @@ export default defineAddon({
 				eslintConfigs.push(common.createSpreadElement(tsConfig));
 			}
 
-			const svelteConfig = common.expressionFromString('svelte.configs["flat/recommended"]');
-			eslintConfigs.push(common.createSpreadElement(svelteConfig));
-
 			const globalsBrowser = common.createSpreadElement(
 				common.expressionFromString('globals.browser')
 			);
@@ -80,20 +76,8 @@ export default defineAddon({
 			});
 			eslintConfigs.push(globalsConfig);
 
-			if (typescript) {
-				const svelteTSParserConfig = object.create({
-					files: common.expressionFromString('["**/*.svelte"]'),
-					languageOptions: object.create({
-						parserOptions: object.create({
-							parser: common.expressionFromString('ts.parser')
-						})
-					})
-				});
-				eslintConfigs.push(svelteTSParserConfig);
-			}
-
 			const ignoresConfig = object.create({
-				ignores: common.expressionFromString('["build/", ".svelte-kit/", "dist/"]')
+				ignores: common.expressionFromString('["build/", ".vinxi/", "dist/"]')
 			});
 			eslintConfigs.push(ignoresConfig);
 
@@ -122,7 +106,6 @@ export default defineAddon({
 			// imports
 			if (typescript) imports.addDefault(ast, 'typescript-eslint', 'ts');
 			imports.addDefault(ast, 'globals', 'globals');
-			imports.addDefault(ast, 'eslint-plugin-svelte', 'svelte');
 			imports.addDefault(ast, '@eslint/js', 'js');
 
 			return generateCode();

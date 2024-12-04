@@ -1,6 +1,7 @@
 import { dedent, defineAddon, log, colors } from '@sveltejs/cli-core';
 import { addEslintConfigPrettier } from '../common.ts';
-import { parseJson } from '@sveltejs/cli-core/parsers';
+import { parseJson, parseScript } from '@sveltejs/cli-core/parsers';
+import { object, exports, common } from '@sveltejs/cli-core/js';
 
 export default defineAddon({
 	id: 'prettier',
@@ -9,7 +10,6 @@ export default defineAddon({
 	options: {},
 	run: ({ sv, dependencyVersion }) => {
 		sv.devDependency('prettier', '^3.3.2');
-		sv.devDependency('prettier-plugin-svelte', '^3.2.6');
 
 		sv.file('.prettierignore', (content) => {
 			if (content) return content;
@@ -21,30 +21,11 @@ export default defineAddon({
 			`;
 		});
 
-		sv.file('.prettierrc', (content) => {
-			const { data, generateCode } = parseJson(content);
-			if (Object.keys(data).length === 0) {
-				// we'll only set these defaults if there is no pre-existing config
-				data.useTabs = true;
-				data.singleQuote = true;
-				data.trailingComma = 'none';
-				data.printWidth = 100;
-			}
-
-			data.plugins ??= [];
-			data.overrides ??= [];
-
-			const plugins: string[] = data.plugins;
-			if (!plugins.includes('prettier-plugin-svelte')) {
-				data.plugins.unshift('prettier-plugin-svelte');
-			}
-
-			const overrides: Array<{ files: string | string[]; options?: { parser?: string } }> =
-				data.overrides;
-			const override = overrides.find((o) => o?.options?.parser === 'svelte');
-			if (!override) {
-				overrides.push({ files: '*.svelte', options: { parser: 'svelte' } });
-			}
+		sv.file('prettier.config.js', (content) => {
+			const { ast, generateCode } = parseScript(content);
+			const prettierConfig = object.createEmpty();
+			const defaultExport = exports.defaultExport(ast, prettierConfig);
+			common.addJsDocTypeComment(defaultExport.astNode, "import('prettier').Config");
 			return generateCode();
 		});
 

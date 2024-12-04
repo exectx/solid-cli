@@ -1,6 +1,6 @@
-import { defineAddon, defineAddonOptions } from '@sveltejs/cli-core';
+import { defineAddon, defineAddonOptions, log } from '@sveltejs/cli-core';
 import { addImports } from '@sveltejs/cli-core/css';
-import { array, common, exports, imports, object } from '@sveltejs/cli-core/js';
+import { array, common, exports, imports, object, type AstTypes } from '@sveltejs/cli-core/js';
 import { parseCss, parseScript, parseJson, parseSvelte } from '@sveltejs/cli-core/parsers';
 import { addSlot } from '@sveltejs/cli-core/html';
 
@@ -47,7 +47,7 @@ export default defineAddon({
 	shortDescription: 'css framework',
 	homepage: 'https://tailwindcss.com',
 	options,
-	run: ({ sv, options, typescript, kit, dependencyVersion }) => {
+	run: ({ sv, options, typescript, dependencyVersion }) => {
 		const ext = typescript ? 'ts' : 'js';
 		const prettierInstalled = Boolean(dependencyVersion('prettier'));
 
@@ -86,7 +86,7 @@ export default defineAddon({
 			}
 
 			const contentArray = object.property(config, 'content', array.createEmpty());
-			array.push(contentArray, './src/**/*.{html,js,svelte,ts}');
+			array.push(contentArray, './src/**/*.{js,jsx,ts,tsx}');
 
 			const themeObject = object.property(config, 'theme', object.createEmpty());
 			object.property(themeObject, 'extend', object.createEmpty());
@@ -144,40 +144,35 @@ export default defineAddon({
 			return generateCode();
 		});
 
-		if (!kit) {
-			sv.file('src/App.svelte', (content) => {
-				const { script, generateCode } = parseSvelte(content, { typescript });
-				imports.addEmpty(script.ast, './app.css');
-				return generateCode({ script: script.generateCode() });
-			});
-		} else {
-			sv.file(`${kit?.routesDirectory}/+layout.svelte`, (content) => {
-				const { script, template, generateCode } = parseSvelte(content, { typescript });
-				imports.addEmpty(script.ast, '../app.css');
-
-				if (content.length === 0) {
-					const svelteVersion = dependencyVersion('svelte');
-					if (!svelteVersion) throw new Error('Failed to determine svelte version');
-					addSlot(script.ast, template.ast, svelteVersion);
-				}
-
-				return generateCode({
-					script: script.generateCode(),
-					template: content.length === 0 ? template.generateCode() : undefined
-				});
-			});
-		}
-
 		if (dependencyVersion('prettier')) {
-			sv.file('.prettierrc', (content) => {
-				const { data, generateCode } = parseJson(content);
+			sv.file('prettier.config.js', (content) => {
+				const { ast, generateCode } = parseScript(content);
 				const PLUGIN_NAME = 'prettier-plugin-tailwindcss';
-
-				data.plugins ??= [];
-				const plugins: string[] = data.plugins;
-
-				if (!plugins.includes(PLUGIN_NAME)) plugins.push(PLUGIN_NAME);
-
+				const defaultExport = ast.body.find(
+					(node) =>
+						node.type === 'ExportDefaultDeclaration' && node.declaration.type === 'ObjectExpression'
+				) as AstTypes.ExportDefaultDeclaration;
+				if (!defaultExport) {
+					log.error('Failed to find default export in prettier config');
+				}
+				const prettierConfig = defaultExport.declaration as AstTypes.ObjectExpression;
+				const pluginsArray = object.property(prettierConfig, 'plugins', array.createEmpty());
+				if (!pluginsArray.elements.find((e) => e?.type === 'Literal' && e.value === PLUGIN_NAME)) {
+					const hasJsDoc = defaultExport.comments
+						?.at(0)
+						?.value.includes("import('prettier-plugin-tailwindcss').PluginOptions");
+					if (!hasJsDoc) {
+						defaultExport.comments = [
+							{
+								type: 'CommentBlock',
+								value:
+									"* @type {import('prettier').Config & import('prettier-plugin-tailwindcss').PluginOptions}",
+								leading: true
+							}
+						];
+					}
+					array.push(pluginsArray, common.createLiteral(PLUGIN_NAME));
+				}
 				return generateCode();
 			});
 		}

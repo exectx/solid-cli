@@ -43,6 +43,7 @@ export default defineAddon({
 	},
 	run: ({ sv, typescript, options, kit, dependencyVersion }) => {
 		const ext = typescript ? 'ts' : 'js';
+		const jsxExt = typescript ? 'tsx' : 'jsx';
 
 		sv.dependency('@oslojs/crypto', '^1.0.1');
 		sv.dependency('@oslojs/encoding', '^1.1.0');
@@ -204,17 +205,18 @@ export default defineAddon({
 		sv.file(`${kit?.libDirectory}/server/auth.${ext}`, (content) => {
 			const { ast, generateCode } = parseScript(content);
 
-			js.imports.addNamespace(ast, '$lib/server/db/schema', 'table');
-			js.imports.addNamed(ast, '$lib/server/db', { db: 'db' });
+			js.imports.addNamespace(ast, `${kit?.alias}/lib/server/db/schema`, 'table');
+			js.imports.addNamed(ast, `${kit?.alias}/lib/server/db`, { db: 'db' });
 			js.imports.addNamed(ast, '@oslojs/encoding', {
 				encodeBase64url: 'encodeBase64url',
 				encodeHexLowerCase: 'encodeHexLowerCase'
 			});
 			js.imports.addNamed(ast, '@oslojs/crypto/sha2', { sha256: 'sha256' });
 			js.imports.addNamed(ast, 'drizzle-orm', { eq: 'eq' });
-			if (typescript) {
-				js.imports.addNamed(ast, '@sveltejs/kit', { RequestEvent: 'RequestEvent' }, true);
-			}
+			js.imports.addNamed(ast, 'vinxi/http', {
+				deleteCookie: 'deleteCookie',
+				setCookie: 'setCookie'
+			});
 
 			const ms = new MagicString(generateCode().trim());
 			const [ts] = utils.createPrinter(typescript);
@@ -307,12 +309,11 @@ export default defineAddon({
 			if (!ms.original.includes('export function setSessionTokenCookie')) {
 				const setSessionTokenCookie = dedent`					
 					${ts('', '/**')}
-					${ts('', ' * @param {import("@sveltejs/kit").RequestEvent} event')}
 					${ts('', ' * @param {string} token')}
 					${ts('', ' * @param {Date} expiresAt')}
 					${ts('', ' */')}
-					export function setSessionTokenCookie(event${ts(': RequestEvent')}, token${ts(': string')}, expiresAt${ts(': Date')}) {
-						event.cookies.set(sessionCookieName, token, {
+					export function setSessionTokenCookie(token${ts(': string')}, expiresAt${ts(': Date')}) {
+						setCookie(sessionCookieName, token, {
 							expires: expiresAt,
 							path: '/'
 						});
@@ -321,9 +322,8 @@ export default defineAddon({
 			}
 			if (!ms.original.includes('export function deleteSessionTokenCookie')) {
 				const deleteSessionTokenCookie = dedent`					
-					${ts('', '/** @param {import("@sveltejs/kit").RequestEvent} event */')}
-					export function deleteSessionTokenCookie(event${ts(': RequestEvent')}) {
-						event.cookies.delete(sessionCookieName, {
+					export function deleteSessionTokenCookie() {
+						deleteCookie(sessionCookieName, {
 							path: '/'
 						});
 					}`;
@@ -334,12 +334,19 @@ export default defineAddon({
 		});
 
 		if (typescript) {
-			sv.file('src/app.d.ts', (content) => {
+			sv.file('src/entry-server.tsx', (content) => {
 				const { ast, generateCode } = parseScript(content);
 
 				const locals = js.kit.addGlobalAppInterface(ast, 'Locals');
+
+				js.imports.addNamed(
+					ast,
+					`${kit?.alias}/lib/server/auth`,
+					{ SessionValidationResult: 'SessionValidationResult' },
+					true
+				);
 				if (!locals) {
-					throw new Error('Failed detecting `locals` interface in `src/app.d.ts`');
+					throw new Error('Failed detecting `locals` interface in `src/entry-server.tsx`');
 				}
 
 				const user = locals.body.body.find((prop) => js.common.hasTypeProp('user', prop));
@@ -355,229 +362,334 @@ export default defineAddon({
 			});
 		}
 
-		sv.file(`src/hooks.server.${ext}`, (content) => {
+		sv.file(`src/middleware.${ext}`, (content) => {
 			const { ast, generateCode } = parseScript(content);
-			js.imports.addNamespace(ast, '$lib/server/auth.js', 'auth');
-			js.kit.addHooksHandle(ast, typescript, 'handleAuth', getAuthHandleContent());
+			js.imports.addNamespace(ast, `${kit?.alias}/lib/server/auth`, 'auth');
+
+			// check if `createMiddleware` named import already exists
+			const hastMiddlewareImport = ast.body.find(
+				(n) =>
+					n.type === 'ImportDeclaration' &&
+					n.source.value === '@solidjs/start/middleware' &&
+					n.specifiers?.some(
+						(s) =>
+							s.type === 'ImportSpecifier' &&
+							s.imported.type === 'Identifier' &&
+							s.imported.name === 'createMiddleware'
+					)
+			);
+			const hasCookieImport = ast.body.find(
+				(n) =>
+					n.type === 'ImportDeclaration' &&
+					n.source.value === 'vinxi/http' &&
+					n.specifiers?.some(
+						(s) =>
+							s.type === 'ImportSpecifier' &&
+							s.imported.type === 'Identifier' &&
+							s.imported.name === 'getCookie'
+					)
+			);
+			if (!hastMiddlewareImport) {
+				js.imports.addNamed(ast, '@solidjs/start/middleware', {
+					createMiddleware: 'createMiddleware'
+				});
+			}
+			if (!hasCookieImport) {
+				js.imports.addNamed(ast, 'vinxi/http', { getCookie: 'getCookie' });
+			}
+			js.kit.addMiddleware(ast, typescript, 'authMiddleware', getAuthMiddlewareContent());
+			return generateCode();
+		});
+
+		sv.file(`app.config.${ext}`, (content) => {
+			const { ast, generateCode } = parseScript(content);
+			const { value: rootObject } = js.exports.defaultExport(
+				ast,
+				js.functions.call('defineConfig', [])
+			);
+			const param1 = js.functions.argumentByIndex(rootObject, 0, js.object.createEmpty());
+			js.object.property(param1, 'middleware', js.common.createLiteral(`./src/middleware.${ext}`));
 			return generateCode();
 		});
 
 		if (options.demo) {
-			sv.file(`${kit?.routesDirectory}/demo/+page.svelte`, (content) => {
-				return addToDemoPage(content, 'lucia');
+			sv.file(`${kit?.routesDirectory}/demo/index.${jsxExt}`, (content) => {
+				const template = addToDemoPage('', 'lucia');
+				const { ast, generateCode } = parseScript(content);
+				const defaultExportNodeIdx = ast.body.findIndex(
+					(n) => n.type === 'ExportDefaultDeclaration'
+				);
+				let defaultExportNode = ast.body[defaultExportNodeIdx] as
+					| AstTypes.ExportDefaultDeclaration
+					| undefined;
+				const demoComponent = js.common.statementFromString(
+					'export default function Demo() {}'
+				) as AstTypes.ExportDefaultDeclaration;
+
+				if (!defaultExportNode || defaultExportNode.declaration.type !== 'FunctionDeclaration') {
+					defaultExportNodeIdx === -1
+						? ast.body.push(demoComponent)
+						: (ast.body[defaultExportNodeIdx] = demoComponent);
+					defaultExportNode = demoComponent;
+				}
+
+				if (defaultExportNode.declaration.type !== 'FunctionDeclaration') {
+					// NOTE: doing this for typescript
+					throw new Error('Expected default export to be a function declaration');
+				}
+
+				let returnStatement = defaultExportNode.declaration.body.body.find(
+					(n) => n.type === 'ReturnStatement'
+				);
+				const jsxReturnStatement = js.common.statementFromString(
+					'return <main></main>'
+				) as AstTypes.ReturnStatement;
+				const jsxElement = jsxReturnStatement.argument as AstTypes.JSXElement;
+
+				if (!returnStatement) {
+					returnStatement = jsxReturnStatement;
+					defaultExportNode.declaration.body.body.push(returnStatement);
+				}
+				if (!returnStatement.argument || returnStatement.argument.type !== 'JSXElement') {
+					// NOTE: Overwrite incompatible return statement
+					returnStatement.argument = jsxElement;
+				}
+				returnStatement.argument.children ??= [];
+				returnStatement.argument.children.push(
+					js.common.expressionFromString(template) as AstTypes.JSXElement
+				);
+				return generateCode();
 			});
 
-			sv.file(`${kit!.routesDirectory}/demo/lucia/login/+page.server.${ext}`, (content) => {
+			sv.file(`${kit!.routesDirectory}/demo/lucia/login.${jsxExt}`, (content) => {
 				if (content) {
-					const filePath = `${kit!.routesDirectory}/demo/lucia/login/+page.server.${typescript ? 'ts' : 'js'}`;
+					const filePath = `${kit!.routesDirectory}/demo/lucia/login.${jsxExt}`;
 					log.warn(`Existing ${colors.yellow(filePath)} file. Could not update.`);
 					return content;
 				}
 
 				const [ts] = utils.createPrinter(typescript);
 				return dedent`
-					import { hash, verify } from '@node-rs/argon2';
-					import { encodeBase32LowerCase } from '@oslojs/encoding';
-					import { fail, redirect } from '@sveltejs/kit';
-					import { eq } from 'drizzle-orm';
-					import * as auth from '$lib/server/auth';
-					import { db } from '$lib/server/db';
-					import * as table from '$lib/server/db/schema';
-					${ts("import type { Actions, PageServerLoad } from './$types';\n")}
-					export const load${ts(': PageServerLoad')} = async (event) => {
-						if (event.locals.user) {
-							return redirect(302, '/demo/lucia');
-						}
-						return {};
-					};
+          import {
+            action,
+            query,
+            redirect,
+            useSubmission,
+            ${ts('type RouteDefinition,\n')}
+          } from "@solidjs/router";
+          import * as table from "${kit?.alias}/lib/server/db/schema";
+          import * as auth from "${kit?.alias}/lib/server/auth";
+          import { hash, verify } from "@node-rs/argon2";
+          import { getRequestEvent } from "solid-js/web";
+          import { encodeBase32LowerCase } from "@oslojs/encoding";
+          import { db } from "${kit?.alias}/lib/server/db";
+          import { eq } from "drizzle-orm";
+          import { setResponseStatus } from "vinxi/http";
 
-					export const actions${ts(': Actions')} = {
-						login: async (event) => {
-							const formData = await event.request.formData();
-							const username = formData.get('username');
-							const password = formData.get('password');
+          const redirectIfAuthed = query(async () => {
+            "use server";
+            const event = getRequestEvent();
+            if (event?.locals.user) {
+              return redirect("/demo/lucia/");
+            }
+            return {};
+          }, "authed-login?");
 
-							if (!validateUsername(username)) {
-								return fail(400, { message: 'Invalid username' });
-							}
-							if (!validatePassword(password)) {
-								return fail(400, { message: 'Invalid password' });
-							}
+          export const route${ts(': RouteDefinition')} = {
+            async preload() {
+              return redirectIfAuthed();
+            },
+          };
 
-							const results = await db
-								.select()
-								.from(table.user)
-								.where(eq(table.user.username, username));
+          const login = action(async (formData${ts(': FormData')}) => {
+            "use server";
+            const event = getRequestEvent()${ts('!')};
+            const username = formData.get("username");
+            const password = formData.get("password");
+            if (!validateUsername(username)) {
+              setResponseStatus(400);
+              throw new Error("Invalid username");
+            }
+            if (!validatePassword(password)) {
+              setResponseStatus(400);
+              throw new Error("Invalid password");
+            }
+            const results = await db
+              .select()
+              .from(table.user)
+              .where(eq(table.user.username, username));
+            const existingUser = results.at(0);
+            if (!existingUser) {
+              setResponseStatus(400);
+              throw new Error("Incorrect username or password");
+            }
+            const validPassword = await verify(existingUser.passwordHash, password, {
+              memoryCost: 19456,
+              timeCost: 2,
+              outputLen: 32,
+              parallelism: 1,
+            });
+            if (!validPassword) {
+              setResponseStatus(400);
+              throw new Error("Incorrect username or password");
+            }
+            const sessionToken = auth.generateSessionToken();
+            const session = await auth.createSession(sessionToken, existingUser.id);
+            auth.setSessionTokenCookie(sessionToken, session.expiresAt);
+            event.locals.user = existingUser;
+            event.locals.session = session;
+            return redirect("/demo/lucia");
+          });
 
-							const existingUser = results.at(0);
-							if (!existingUser) {
-								return fail(400, { message: 'Incorrect username or password' });
-							}
+          const register = action(async (formData${ts(': FormData')}) => {
+            "use server";
+            const event = getRequestEvent()${ts('!')};
+            const username = formData.get("username");
+            const password = formData.get("password");
+            if (!validateUsername(username)) {
+              setResponseStatus(400);
+              throw new Error("Invalid username");
+            }
+            if (!validatePassword(password)) {
+              setResponseStatus(400);
+              throw new Error("Invalid password");
+            }
+            const userId = generateUserId();
+            const passwordHash = await hash(password, {
+              // recommended minimum parameters
+              memoryCost: 19456,
+              timeCost: 2,
+              outputLen: 32,
+              parallelism: 1,
+            });
+            try {
+              await db.insert(table.user).values({ id: userId, username, passwordHash });
+              const sessionToken = auth.generateSessionToken();
+              const session = await auth.createSession(sessionToken, userId);
+              auth.setSessionTokenCookie(sessionToken, session.expiresAt);
+              event.locals.user = { id: userId, username };
+              event.locals.session = session;
+            } catch (e) {
+              setResponseStatus(500);
+              throw new Error("An error has occurred");
+            }
+            return redirect("/demo/lucia");
+          });
 
-							const validPassword = await verify(existingUser.passwordHash, password, {
-								memoryCost: 19456,
-								timeCost: 2,
-								outputLen: 32,
-								parallelism: 1,
-							});
-							if (!validPassword) {
-								return fail(400, { message: 'Incorrect username or password' });
-							}
+          function generateUserId() {
+            // ID with 120 bits of entropy, or about the same as UUID v4.
+            const bytes = crypto.getRandomValues(new Uint8Array(15));
+            const id = encodeBase32LowerCase(bytes);
+            return id;
+          }
 
-							const sessionToken = auth.generateSessionToken();
-							const session = await auth.createSession(sessionToken, existingUser.id);
-							auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
+          function validateUsername(username${ts(': unknown')})${ts(': username is string')} {
+            return (
+              typeof username === 'string' &&
+              username.length >= 3 &&
+              username.length <= 31 &&
+              /^[a-z0-9_-]+$/.test(username)
+            );
+          }
 
-							return redirect(302, '/demo/lucia');
-						},
-						register: async (event) => {
-							const formData = await event.request.formData();
-							const username = formData.get('username');
-							const password = formData.get('password');
+          function validatePassword(password${ts(': unknown')})${ts(': password is string')} {
+            return (
+              typeof password === 'string' &&
+              password.length >= 6 &&
+              password.length <= 255
+            );
+          }
 
-							if (!validateUsername(username)) {
-								return fail(400, { message: 'Invalid username' });
-							}
-							if (!validatePassword(password)) {
-								return fail(400, { message: 'Invalid password' });
-							}
-
-							const userId = generateUserId();
-							const passwordHash = await hash(password, {
-								// recommended minimum parameters
-								memoryCost: 19456,
-								timeCost: 2,
-								outputLen: 32,
-								parallelism: 1,
-							});
-
-							try {
-								await db.insert(table.user).values({ id: userId, username, passwordHash });
-
-								const sessionToken = auth.generateSessionToken();
-								const session = await auth.createSession(sessionToken, userId);
-								auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
-							} catch (e) {
-								return fail(500, { message: 'An error has occurred' });
-							}
-							return redirect(302, '/demo/lucia');
-						},
-					};
-
-					function generateUserId() {
-						// ID with 120 bits of entropy, or about the same as UUID v4.
-						const bytes = crypto.getRandomValues(new Uint8Array(15));
-						const id = encodeBase32LowerCase(bytes);
-						return id;
-					}
-
-					function validateUsername(username${ts(': unknown')})${ts(': username is string')} {
-						return (
-							typeof username === 'string' &&
-							username.length >= 3 &&
-							username.length <= 31 &&
-							/^[a-z0-9_-]+$/.test(username)
-						);
-					}
-
-					function validatePassword(password${ts(': unknown')})${ts(': password is string')} {
-						return (
-							typeof password === 'string' &&
-							password.length >= 6 &&
-							password.length <= 255
-						);
-					}
-				`;
+          export default function () {
+            const loginSubmission = useSubmission(login);
+            const registerSubmission = useSubmission(register);
+            return (
+              <>
+                <h1>Login/Register</h1>
+                <form method="post" action={login}>
+                  <label>
+                    Username
+                    <input name="username" />
+                  </label>
+                  <label>
+                    Password
+                    <input type="password" name="password" />
+                  </label>
+                  <button>Login</button>
+                  <button formaction={register}>Register</button>
+                </form>
+                <p style="color: red">{loginSubmission.error?.message ?? ""}</p>
+                <p style="color: red">{registerSubmission.error?.message ?? ""}</p>
+              </>
+            );
+          }
+        `;
 			});
 
-			sv.file(`${kit!.routesDirectory}/demo/lucia/login/+page.svelte`, (content) => {
+			sv.file(`${kit!.routesDirectory}/demo/lucia/index.${jsxExt}`, (content) => {
 				if (content) {
-					const filePath = `${kit!.routesDirectory}/demo/lucia/login/+page.svelte`;
-					log.warn(`Existing ${colors.yellow(filePath)} file. Could not update.`);
-					return content;
-				}
-
-				const svelte5 = !!dependencyVersion('svelte')?.startsWith('5');
-				const [ts, s5] = utils.createPrinter(typescript, svelte5);
-				return dedent`
-					<script ${ts("lang='ts'")}>
-						import { enhance } from '$app/forms';
-						${ts("import type { ActionData } from './$types';\n")}
-						${s5(`let { form }${ts(': { form: ActionData }')} = $props();`, `export let form${ts(': ActionData')};`)}
-					</script>
-
-					<h1>Login/Register</h1>
-					<form method='post' action='?/login' use:enhance>
-						<label>
-							Username
-							<input name='username' />
-						</label>
-						<label>
-							Password
-							<input type='password' name='password' />
-						</label>
-						<button>Login</button>
-						<button formaction='?/register'>Register</button>
-					</form>
-					<p style='color: red'>{form?.message ?? ''}</p>
-				`;
-			});
-
-			sv.file(`${kit!.routesDirectory}/demo/lucia/+page.server.${ext}`, (content) => {
-				if (content) {
-					const filePath = `${kit!.routesDirectory}/demo/lucia/+page.server.${typescript ? 'ts' : 'js'}`;
+					const filePath = `${kit!.routesDirectory}/demo/lucia/index.${jsxExt}`;
 					log.warn(`Existing ${colors.yellow(filePath)} file. Could not update.`);
 					return content;
 				}
 
 				const [ts] = utils.createPrinter(typescript);
 				return dedent`
-					import * as auth from '$lib/server/auth';
-					import { fail, redirect } from '@sveltejs/kit';
-					${ts("import type { Actions, PageServerLoad } from './$types';\n")}
-					export const load${ts(': PageServerLoad')} = async (event) => {
-						if (!event.locals.user) {
-							return redirect(302, '/demo/lucia/login');
-						}
-						return { user: event.locals.user };
-					};
+          import {
+            query,
+            createAsync,
+            redirect,
+            ${ts('type RouteDefinition,\n')}
+            action,
+          } from "@solidjs/router";
+          import * as auth from "${kit?.alias}/lib/server/auth";
+          import { getRequestEvent } from "solid-js/web";
+          import { setResponseStatus } from "vinxi/http";
 
-					export const actions${ts(': Actions')} = {
-						logout: async (event) => {
-							if (!event.locals.session) {
-								return fail(401);
-							}
-							await auth.invalidateSession(event.locals.session.id);
-							auth.deleteSessionTokenCookie(event);
+          const redirectIfNotAuthed = query(async () => {
+            "use server";
+            const event = getRequestEvent();
+            if (!event?.locals.user) {
+              return redirect("/demo/lucia/login");
+            }
+            return { user: event.locals.user };
+          }, "authed?");
 
-							return redirect(302, '/demo/lucia/login');
-						},
-					};
-				`;
-			});
+          export const route${ts(': RouteDefinition')} = {
+            async preload() {
+              return redirectIfNotAuthed();
+            },
+          };
 
-			sv.file(`${kit!.routesDirectory}/demo/lucia/+page.svelte`, (content) => {
-				if (content) {
-					const filePath = `${kit!.routesDirectory}/demo/lucia/+page.svelte`;
-					log.warn(`Existing ${colors.yellow(filePath)} file. Could not update.`);
-					return content;
-				}
+          const logout = action(async () => {
+            "use server";
+            const event = getRequestEvent()${ts('!')};
+            if (!event.locals.session) {
+              setResponseStatus(401);
+              return;
+            }
+            await auth.invalidateSession(event.locals.session.id);
+            auth.deleteSessionTokenCookie();
+            event.locals.session = null;
+            event.locals.user = null;
+            return redirect("/demo/lucia/login");
+          });
 
-				const svelte5 = !!dependencyVersion('svelte')?.startsWith('5');
-				const [ts, s5] = utils.createPrinter(typescript, svelte5);
-				return dedent`
-					<script ${ts("lang='ts'")}>
-						import { enhance } from '$app/forms';
-						${ts("import type { PageServerData } from './$types';\n")}
-						${s5(`let { data }${ts(': { data: PageServerData }')} = $props();`, `export let data${ts(': PageServerData')};`)}
-					</script>
-
-					<h1>Hi, {data.user.username}!</h1>
-					<p>Your user ID is {data.user.id}.</p>
-					<form method='post' action='?/logout' use:enhance>
-						<button>Sign out</button>
-					</form>
-				`;
+          export default function () {
+            const data = createAsync(() => redirectIfNotAuthed(), {
+              deferStream: true,
+            });
+            return (
+              <>
+                <h1>Hi, {data()?.user.username}!</h1>
+                <p>Your user ID is {data()?.user.id}.</p>
+                <form method="post" action={logout}>
+                  <button>Sign out</button>
+                </form>
+              </>
+            );
+          }
+        `;
 			});
 		}
 	},
@@ -605,9 +717,8 @@ function createLuciaType(name: string): AstTypes.TSInterfaceBody['body'][number]
 			typeAnnotation: {
 				type: 'TSIndexedAccessType',
 				objectType: {
-					type: 'TSImportType',
-					argument: { type: 'StringLiteral', value: '$lib/server/auth' },
-					qualifier: {
+					type: 'TSTypeReference',
+					typeName: {
 						type: 'Identifier',
 						name: 'SessionValidationResult'
 					}
@@ -624,28 +735,24 @@ function createLuciaType(name: string): AstTypes.TSInterfaceBody['body'][number]
 	};
 }
 
-function getAuthHandleContent() {
+function getAuthMiddlewareContent() {
 	return `
-		async ({ event, resolve }) => {
-			const sessionToken = event.cookies.get(auth.sessionCookieName);
-			if (!sessionToken) {
-				event.locals.user = null;
-				event.locals.session = null;
-				return resolve(event);
-			}
-
-			const { session, user } = await auth.validateSessionToken(sessionToken);
-			if (session) {
-				auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
-			} else {
-				auth.deleteSessionTokenCookie(event);
-			}
-
-			event.locals.user = user;
-			event.locals.session = session;
-
-			return resolve(event);
-		};`;
+    async (event) => {
+      const sessionToken = getCookie(event.nativeEvent, auth.sessionCookieName);
+      if (!sessionToken) {
+        event.locals.user = null;
+        event.locals.session = null;
+        return;
+      }
+      const { session, user } = await auth.validateSessionToken(sessionToken);
+      if (session) {
+        auth.setSessionTokenCookie(sessionToken, session.expiresAt);
+      } else {
+        auth.deleteSessionTokenCookie();
+      }
+      event.locals.user = user;
+      event.locals.session = session;
+    };`;
 }
 
 function getCallExpression(ast: AstTypes.ASTNode): AstTypes.CallExpression | undefined {

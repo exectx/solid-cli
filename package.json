@@ -13,6 +13,7 @@
 		"check": "pnpm --parallel check",
 		"dev": "rollup --config --watch",
 		"format": "pnpm --parallel format",
+		"format:templates": "prettier --write ./packages/create/templates ./packages/create/shared --config prettier.config.templates.js",
 		"lint": "pnpm --parallel lint && eslint --cache --cache-location node_modules/.eslintcache",
 		"test": "vitest run --silent",
 		"test:ui": "vitest --ui"
@@ -37,7 +38,7 @@
 		"rollup": "^4.22.4",
 		"rollup-plugin-esbuild": "^6.1.1",
 		"rollup-plugin-preserve-shebangs": "^0.2.0",
-		"sv": "workspace:*",
+		"solid.new": "workspace:*",
 		"svelte": "^5.0.0",
 		"typescript": "^5.6.2",
 		"typescript-eslint": "^8.5.0",

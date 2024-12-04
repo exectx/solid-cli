@@ -65,7 +65,7 @@ importers:
       rollup-plugin-preserve-shebangs:
         specifier: ^0.2.0
         version: 0.2.0(rollup@4.22.4)
-      sv:
+      solid.new:
         specifier: workspace:*
         version: link:packages/cli
       svelte:
@@ -93,7 +93,7 @@ importers:
       '@playwright/test':
         specifier: ^1.48.2
         version: 1.48.2
-      sv:
+      solid.new:
         specifier: workspace:*
         version: link:../packages/cli
       vitest:

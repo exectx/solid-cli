@@ -111,7 +111,7 @@ export const commonFilePaths = {
 	packageJson: 'package.json',
 	svelteConfig: 'svelte.config.js',
 	tsconfig: 'tsconfig.json',
-	viteConfigTS: 'vite.config.ts'
+	viteConfigTS: 'app.config.ts'
 } as const;
 
 export function getHighlighter(): Highlighter {
