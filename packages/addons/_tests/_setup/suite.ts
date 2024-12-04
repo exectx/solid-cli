@@ -2,8 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import * as vitest from 'vitest';
-import { installAddon, type AddonMap, type OptionMap } from 'sv';
-import { createProject, startPreview, type CreateProject, type ProjectVariant } from 'sv/testing';
+import { installAddon, type AddonMap, type OptionMap } from 'solid.new';
+import {
+	createProject,
+	startPreview,
+	type CreateProject,
+	type ProjectVariant
+} from 'solid.new/testing';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
 const cwd = vitest.inject('testDir');
@@ -80,7 +85,7 @@ async function prepareServer(
 	{
 		cwd,
 		page,
-		previewCommand = 'npm run preview',
+		previewCommand = 'npm run start',
 		buildCommand = 'npm run build',
 		installCommand = 'pnpm install --no-frozen-lockfile'
 	}: PrepareServerOptions,

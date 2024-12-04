@@ -2,7 +2,7 @@ import process from 'node:process';
 import { expect } from '@playwright/test';
 import { setupTest } from '../_setup/suite.ts';
 import { officialAddons } from '../../index.ts';
-import type { AddonMap, OptionMap } from 'sv';
+import type { AddonMap, OptionMap } from 'solid.new';
 
 const windowsCI = process.env.CI && process.platform === 'win32';
 const addons = officialAddons.reduce<AddonMap>((addonMap, addon) => {

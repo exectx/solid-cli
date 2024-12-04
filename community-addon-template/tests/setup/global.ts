@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { setup, type ProjectVariant } from 'sv/testing';
+import { setup, type ProjectVariant } from 'solid.new/testing';
 import type { GlobalSetupContext } from 'vitest/node';
 
 const variants: ProjectVariant[] = ['kit-js', 'kit-ts', 'vite-js', 'vite-ts'];

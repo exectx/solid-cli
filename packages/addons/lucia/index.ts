@@ -337,7 +337,7 @@ export default defineAddon({
 			sv.file('src/entry-server.tsx', (content) => {
 				const { ast, generateCode } = parseScript(content);
 
-				const locals = js.kit.addGlobalAppInterface(ast, 'Locals');
+				const locals = js.kit.addGlobalAppInterface(ast, 'RequestEventLocals');
 
 				js.imports.addNamed(
 					ast,
