@@ -14,8 +14,9 @@ const pkgRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..');
 /** @param {string} content */
 async function convert_typescript(content) {
 	let { code } = transform(content, {
-		transforms: ['typescript'],
-		disableESTransforms: true
+		transforms: ['typescript', 'jsx'],
+		disableESTransforms: true,
+		jsxRuntime: 'preserve'
 	});
 
 	// sucrase leaves invalid class fields intact
@@ -25,11 +26,11 @@ async function convert_typescript(content) {
 	code = code.replace(/(\/\*\* @type.+? \*\/) (.+?) \/\*\*\*\//g, '$1($2)');
 
 	return await prettier.format(code, {
-		parser: 'babel',
-		useTabs: true,
-		singleQuote: true,
-		trailingComma: 'none',
-		printWidth: 100
+		parser: 'babel'
+		// useTabs: true,
+		// singleQuote: true,
+		// trailingComma: 'none',
+		// printWidth: 100
 	});
 }
 
@@ -105,13 +106,15 @@ async function generate_templates(dist, shared) {
 			// ignore contents of .gitignore or .ignore
 			if (!gitignore.accepts(name) || !ignore.accepts(name) || name === '.ignore') continue;
 
-			if (/\.(ts|svelte)$/.test(name)) {
+			if (/\.(ts|tsx|svelte)$/.test(name)) {
 				const contents = fs.readFileSync(path.join(cwd, name), 'utf8');
 
 				if (name.endsWith('.d.ts')) {
 					if (name.endsWith('app.d.ts')) types.checkjs.push({ name, contents });
+					if (name.endsWith('global.d.ts'))
+						types.none.push({ name: name.replace(/\.d\.ts$/, '.d.js'), contents });
 					types.typescript.push({ name, contents });
-				} else if (name.endsWith('.ts')) {
+				} else if (name.endsWith('.ts') || name.endsWith('.tsx')) {
 					const js = await convert_typescript(contents);
 
 					types.typescript.push({
@@ -119,15 +122,28 @@ async function generate_templates(dist, shared) {
 						contents: strip_jsdoc(contents)
 					});
 
-					types.checkjs.push({
-						name: name.replace(/\.ts$/, '.js'),
-						contents: js
-					});
+					if (name.endsWith('.ts')) {
+						types.checkjs.push({
+							name: name.replace(/\.ts$/, '.js'),
+							contents: js
+						});
+						types.none.push({
+							name: name.replace(/\.ts$/, '.js'),
+							contents: strip_jsdoc(js)
+						});
+					}
 
-					types.none.push({
-						name: name.replace(/\.ts$/, '.js'),
-						contents: strip_jsdoc(js)
-					});
+					if (name.endsWith('.tsx')) {
+						types.checkjs.push({
+							name: name.replace(/\.tsx$/, '.jsx'),
+							contents: js
+						});
+
+						types.none.push({
+							name: name.replace(/\.tsx$/, '.jsx'),
+							contents: strip_jsdoc(js)
+						});
+					}
 				} else {
 					// we jump through some hoops, rather than just using svelte.preprocess,
 					// so that the output preserves the original formatting to the extent
@@ -271,11 +287,14 @@ async function generate_shared(dist) {
 			name = rest.join('/');
 		}
 
-		if (name.endsWith('.ts') && !include.includes('typescript')) {
+		if ((name.endsWith('.ts') || name.endsWith('.tsx')) && !include.includes('typescript')) {
 			// file includes types in TypeScript and JSDoc —
 			// create .js file, with and without JSDoc
 			const js = await convert_typescript(contents);
-			const js_name = name.replace(/\.ts$/, '.js');
+			// if (name.endsWith('.tsx')) name = name.replace(/\.tsx$/, '.jsx');
+			const js_name = name.endsWith('.ts')
+				? name.replace(/\.ts$/, '.js')
+				: name.replace(/\.tsx$/, '.jsx');
 
 			// typescript
 			files.push({

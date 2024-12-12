@@ -1,16 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as find from 'empathic/find';
-import { common, object, type AstTypes } from '@sveltejs/cli-core/js';
-import { parseScript } from '@sveltejs/cli-core/parsers';
-import { TESTING } from '../../env.ts';
-import { getUserAgent } from '../../common.ts';
+import { type AstTypes } from '@sveltejs/cli-core/js';
+import { parseScript, parseJson } from '@sveltejs/cli-core/parsers';
+import { detectSync } from 'package-manager-detector';
+import type { OptionValues, PackageManager, Workspace } from '@sveltejs/cli-core';
+import { TESTING } from '../../utils/env.ts';
 import { commonFilePaths, getPackageJson, readFile } from './utils.ts';
-import type { Workspace } from '@sveltejs/cli-core';
-import type { AgentName } from 'package-manager-detector';
+import { getUserAgent } from '../../utils/package-manager.ts';
 
-type CreateWorkspaceOptions = { cwd: string; packageManager?: AgentName };
-export function createWorkspace({ cwd, packageManager }: CreateWorkspaceOptions): Workspace<any> {
+type CreateWorkspaceOptions = {
+	cwd: string;
+	packageManager?: PackageManager;
+	options?: OptionValues<any>;
+};
+export function createWorkspace({
+	cwd,
+	options = {},
+	packageManager = detectSync({ cwd })?.name ?? getUserAgent() ?? 'npm'
+}: CreateWorkspaceOptions): Workspace<any> {
 	const resolvedCwd = path.resolve(cwd);
 	const viteConfigPath = path.join(resolvedCwd, commonFilePaths.viteConfigTS);
 	let usesTypescript = fs.existsSync(viteConfigPath);
@@ -43,12 +51,12 @@ export function createWorkspace({ cwd, packageManager }: CreateWorkspaceOptions)
 	}
 
 	return {
-		kit: dependencies['@sveltejs/kit'] ? parseKitOptions(resolvedCwd) : undefined,
-		packageManager: packageManager ?? getUserAgent() ?? 'npm',
 		cwd: resolvedCwd,
-		dependencyVersion: (pkg) => dependencies[pkg],
+		options,
+		packageManager,
 		typescript: usesTypescript,
-		options: {}
+		kit: dependencies['@solidjs/start'] ? parseKitOptions(resolvedCwd, usesTypescript) : undefined,
+		dependencyVersion: (pkg) => dependencies[pkg]
 	};
 }
 
@@ -70,14 +78,29 @@ function findRoot(cwd: string): string {
 	return root;
 }
 
-function parseKitOptions(cwd: string) {
-	const configSource = readFile(cwd, commonFilePaths.svelteConfig);
+function parseKitOptions(cwd: string, ts: boolean) {
+	const jsOrTsConfig = readFile(cwd, ts ? 'tsconfig.json' : 'jsconfig.json');
+	const { data } = parseJson(jsOrTsConfig);
+	const paths = Object.entries(data.compilerOptions?.paths ?? {});
+	let mainAlias = '';
+	for (const [pathName, pathValue] of paths) {
+		if (!(pathValue instanceof Array)) {
+			continue;
+		}
+		if (pathValue.find((pathMapping: string) => pathMapping.includes('src/*'))) {
+			mainAlias = pathName.replace('/*', '');
+			break;
+		}
+	}
+
+	const configSource = readFile(cwd, `app.config.${ts ? 'ts' : 'js'}`);
 	const { ast } = parseScript(configSource);
 
+	// NOTE: Leaving these checks to make sure app.config.[js|ts] is valid
 	const defaultExport = ast.body.find((s) => s.type === 'ExportDefaultDeclaration');
-	if (!defaultExport) throw Error('Missing default export in `svelte.config.js`');
+	if (!defaultExport) throw Error(`Missing default export in \`app.config.${ts ? 'ts' : 'js'}\``);
 
-	let objectExpression: AstTypes.ObjectExpression | undefined;
+	let callExpression: AstTypes.CallExpression | undefined;
 	if (defaultExport.declaration.type === 'Identifier') {
 		// e.g. `export default config;`
 		const identifier = defaultExport.declaration;
@@ -91,28 +114,34 @@ function parseKitOptions(cwd: string) {
 					d.id.name === identifier.name
 			);
 
-			if (declarator?.init?.type !== 'ObjectExpression') continue;
+			if (declarator?.init?.type !== 'CallExpression') continue;
 
-			objectExpression = declarator.init;
+			callExpression = declarator.init;
 		}
 
-		if (!objectExpression)
-			throw Error('Unable to find svelte config object expression from `svelte.config.js`');
-	} else if (defaultExport.declaration.type === 'ObjectExpression') {
+		if (!callExpression)
+			throw Error(
+				`Unable to find solid start config object expression from \`app.config.${ts ? 'ts' : 'js'}\``
+			);
+	} else if (defaultExport.declaration.type === 'CallExpression') {
 		// e.g. `export default { ... };`
-		objectExpression = defaultExport.declaration;
+		callExpression = defaultExport.declaration;
 	}
 
 	// We'll error out since we can't safely determine the config object
-	if (!objectExpression) throw new Error('Unexpected svelte config shape from `svelte.config.js`');
+	if (!callExpression)
+		throw new Error(`Unexpected svelte config shape from \`app.config.${ts ? 'ts' : 'js'}\``);
 
-	const kit = object.property(objectExpression, 'kit', object.createEmpty());
-	const files = object.property(kit, 'files', object.createEmpty());
-	const routes = object.property(files, 'routes', common.createLiteral());
-	const lib = object.property(files, 'lib', common.createLiteral());
+	// NOTE: this commeted block is svelte kit specific, solidstart config doesn't have this structure
 
-	const routesDirectory = (routes.value as string) || 'src/routes';
-	const libDirectory = (lib.value as string) || 'src/lib';
+	// const objectConfig = functions.argumentByIndex(callExpression, 0, object.createEmpty());
+	// const kit = object.property(objectConfig, 'kit', object.createEmpty());
+	// const files = object.property(kit, 'files', object.createEmpty());
+	// const routes = object.property(files, 'routes', common.createLiteral());
+	// const lib = object.property(files, 'lib', common.createLiteral());
 
-	return { routesDirectory, libDirectory };
+	const routesDirectory = 'src/routes';
+	const libDirectory = 'src/lib';
+
+	return { routesDirectory, libDirectory, alias: mainAlias };
 }

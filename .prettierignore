@@ -1,2 +1,2 @@
-packages/core/tests/**/input.*
-packages/core/tests/**/output.*
+packages/create/templates/
+packages/create/shared/

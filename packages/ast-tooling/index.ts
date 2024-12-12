@@ -1,4 +1,4 @@
-import { parse as tsParse } from 'recast/parsers/typescript.js';
+import { parse as tsParse } from 'recast/parsers/babel-ts.js';
 import { parse as recastParse, print as recastPrint, type Options as RecastOptions } from 'recast';
 import { Document, Element, type ChildNode } from 'domhandler';
 import { ElementType, parseDocument } from 'htmlparser2';

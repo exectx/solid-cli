@@ -16,6 +16,22 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# IDEs and editors
+/.idea
+.project
+.classpath
+*.launch
+.settings/
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Vinxi
+dist
+.solid
+.output
+.vercel
+.netlify
+.vinxi
+app.config.timestamp_*.js
