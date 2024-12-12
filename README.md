@@ -1,8 +1,10 @@
-[![Chat](https://img.shields.io/discord/457912077277855764?label=chat&logo=discord)](https://svelte.dev/chat)
-
 # sc2 - Experimental Solid CLI (2)
 
 An attempt to port Svelte CLI to Solid.
+
+```bash
+npx sc2
+```
 
 ✅: Supported
 ⚠️ : Partial Support
