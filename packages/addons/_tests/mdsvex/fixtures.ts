@@ -1,9 +1,9 @@
 export const svxFile = `
 ---
-title: Svex up your markdown
+title: Mdx frontmatter title
 ---
 
-# { title }
+# Title
 
 ## Good stuff in your markdown
 

@@ -25,6 +25,7 @@ export default defineAddon({
 			const { ast, generateCode } = parseScript(content);
 			const prettierConfig = object.createEmpty();
 			const defaultExport = exports.defaultExport(ast, prettierConfig);
+			// NOTE: more checks here in case `add prettier` is run multiple times
 			common.addJsDocTypeComment(defaultExport.astNode, "import('prettier').Config");
 			return generateCode();
 		});

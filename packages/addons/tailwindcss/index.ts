@@ -146,6 +146,7 @@ export default defineAddon({
 		if (dependencyVersion('prettier')) {
 			sv.file('prettier.config.js', (content) => {
 				const { ast, generateCode } = parseScript(content);
+				// TODO: more checks
 				const PLUGIN_NAME = 'prettier-plugin-tailwindcss';
 				const defaultExport = ast.body.find(
 					(node) =>
