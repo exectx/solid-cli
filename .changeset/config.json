@@ -7,5 +7,5 @@
 	"access": "public",
 	"baseBranch": "solid",
 	"updateInternalDependencies": "patch",
-	"ignore": ["!(xsc)"]
+	"ignore": ["!(sc2)"]
 }

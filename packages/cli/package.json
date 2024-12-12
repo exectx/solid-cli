@@ -1,5 +1,5 @@
 {
-	"name": "xsc",
+	"name": "sc2",
 	"version": "0.0.0",
 	"type": "module",
 	"description": "An Experimental CLI for creating and updating SolidStart projects",

@@ -1,6 +1,6 @@
 [![Chat](https://img.shields.io/discord/457912077277855764?label=chat&logo=discord)](https://svelte.dev/chat)
 
-# xsc - Experimental Solid CLI
+# sc2 - Experimental Solid CLI (2)
 
 An attempt to port Svelte CLI to Solid.
 
@@ -12,7 +12,7 @@ An attempt to port Svelte CLI to Solid.
 
 | Package             | Changelog                              |
 | ------------------- | -------------------------------------- |
-| [xsc](packages/cli) | [Changelog](packages/cli/CHANGELOG.md) |
+| [sc2](packages/cli) | [Changelog](packages/cli/CHANGELOG.md) |
 
 ## Templates
 
@@ -38,4 +38,4 @@ An attempt to port Svelte CLI to Solid.
 
 ## License
 
-[MIT](https://github.com/sveltejs/kit/blob/main/LICENSE)
+[MIT](./LICENSE)

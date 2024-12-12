@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import * as vitest from 'vitest';
-import { installAddon, type AddonMap, type OptionMap } from 'xsc';
-import { createProject, startPreview, type CreateProject, type ProjectVariant } from 'xsc/testing';
+import { installAddon, type AddonMap, type OptionMap } from 'sc2';
+import { createProject, startPreview, type CreateProject, type ProjectVariant } from 'sc2/testing';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
 const cwd = vitest.inject('testDir');
