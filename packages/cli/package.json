@@ -1,6 +1,6 @@
 {
 	"name": "xsc",
-	"version": "0.0.0-dev.1",
+	"version": "0.0.0",
 	"type": "module",
 	"description": "An Experimental CLI for creating and updating SolidStart projects",
 	"license": "MIT",
