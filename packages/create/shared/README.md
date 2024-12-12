@@ -8,10 +8,10 @@ If you're seeing this, you've probably already done this step. Congrats!
 
 ```bash
 # create a new project in the current directory
-npx solid.new create
+npx xsc create
 
 # create a new project in my-app
-npx solid.new create my-app
+npx xsc create my-app
 ```
 
 ## Developing

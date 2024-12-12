@@ -38,12 +38,12 @@
 		"rollup": "^4.22.4",
 		"rollup-plugin-esbuild": "^6.1.1",
 		"rollup-plugin-preserve-shebangs": "^0.2.0",
-		"solid.new": "workspace:*",
 		"svelte": "^5.0.0",
 		"typescript": "^5.6.2",
 		"typescript-eslint": "^8.5.0",
 		"unplugin-isolated-decl": "^0.6.5",
-		"vitest": "^2.1.4"
+		"vitest": "^2.1.4",
+		"xsc": "workspace:*"
 	},
 	"packageManager": "pnpm@9.7.0"
 }

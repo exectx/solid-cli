@@ -1,15 +1,15 @@
 {
-	"name": "solid.new",
+	"name": "xsc",
 	"version": "0.0.0-dev.1",
 	"type": "module",
-	"description": "A CLI for creating and updating SvelteKit projects",
+	"description": "An Experimental CLI for creating and updating SolidStart projects",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/exectx/solid.new",
+		"url": "https://github.com/exectx/solid-cli",
 		"directory": "packages/cli"
 	},
-	"homepage": "https://github.com/exectx/solid.new",
+	"homepage": "https://github.com/exectx/solid-cli",
 	"scripts": {
 		"check": "tsc",
 		"format": "pnpm lint --write",
