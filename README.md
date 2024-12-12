@@ -35,3 +35,7 @@ An attempt to port Svelte CLI to Solid.
 | prettier     | ⚠️         | ⚠️         | ❌    |
 | tailwindcss  | ⚠️         | ⚠️         | ❌    |
 | vitest-addon | ✅         | ✅         | ❌    |
+
+## License
+
+[MIT](https://github.com/sveltejs/kit/blob/main/LICENSE)
