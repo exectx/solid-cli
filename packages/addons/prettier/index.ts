@@ -1,14 +1,15 @@
-import { dedent, defineAddon, log, colors } from '@sveltejs/cli-core';
+import { dedent, defineAddon, log, colors, Walker } from '@sveltejs/cli-core';
 import { addEslintConfigPrettier } from '../common.ts';
 import { parseJson, parseScript } from '@sveltejs/cli-core/parsers';
-import { object, exports, common } from '@sveltejs/cli-core/js';
+import { object, exports, common, type AstTypes } from '@sveltejs/cli-core/js';
+import fs from 'node:fs';
 
 export default defineAddon({
 	id: 'prettier',
 	shortDescription: 'formatter',
 	homepage: 'https://prettier.io',
 	options: {},
-	run: ({ sv, dependencyVersion }) => {
+	run: ({ sv, dependencyVersion, cwd }) => {
 		sv.devDependency('prettier', '^3.3.2');
 
 		sv.file('.prettierignore', (content) => {
@@ -21,13 +22,14 @@ export default defineAddon({
 			`;
 		});
 
-		sv.file('prettier.config.js', (content) => {
-			const { ast, generateCode } = parseScript(content);
-			const prettierConfig = object.createEmpty();
-			const defaultExport = exports.defaultExport(ast, prettierConfig);
-			// NOTE: more checks here in case `add prettier` is run multiple times
-			common.addJsDocTypeComment(defaultExport.astNode, "import('prettier').Config");
-			return generateCode();
+		let prettierConfigFile: string | undefined;
+		if (fs.existsSync(`${cwd}/prettier.config.js`)) prettierConfigFile = 'prettier.config.js';
+		if (!prettierConfigFile && fs.existsSync(`${cwd}/.prettierrc`))
+			prettierConfigFile = '.prettierrc';
+		prettierConfigFile ??= 'prettier.config.js';
+
+		sv.file(prettierConfigFile, (content) => {
+			return handlePrettierConfig(prettierConfigFile, content);
 		});
 
 		const eslintVersion = dependencyVersion('eslint');
@@ -69,4 +71,65 @@ const SUPPORTED_ESLINT_VERSION = '9';
 
 function hasEslint(version: string | undefined): boolean {
 	return !!version && version.startsWith(SUPPORTED_ESLINT_VERSION);
+}
+
+function handlePrettierConfig(filename: string, content: string) {
+	if (filename === 'prettier.config.js') {
+		const { ast, generateCode } = parseScript(content);
+		const prettierConfig = exports.defaultExport(ast, object.createEmpty());
+		if (!content) {
+			object.property(prettierConfig.value, 'useTabs', common.createLiteral(false));
+			common.addJsDocTypeComment(prettierConfig.astNode, "import('prettier').Config");
+		}
+		if (prettierConfig.value.type !== 'ObjectExpression') {
+			log.error('Expected existing prettier config to be of type `ObjectExpression`');
+			return content;
+		}
+
+		const defaultExport = ast.body.find((s) => s.type === 'ExportDefaultDeclaration')!;
+		let jsDocComments = defaultExport.comments;
+		if (common.hasNode(defaultExport, prettierConfig.value)) {
+			defaultExport.comments ??= [];
+			jsDocComments = defaultExport.comments;
+		} else {
+			Walker.walk(
+				ast as AstTypes.ASTNode,
+				{},
+				{
+					VariableDeclaration(node, { next, stop }) {
+						if (common.hasNode(node, prettierConfig.value)) {
+							node.comments ??= [];
+							jsDocComments = node.comments;
+							stop();
+						}
+						next();
+					}
+				}
+			);
+			if (!jsDocComments)
+				throw new Error(
+					'Could not find prettier config variable declaration, This state should not be possible'
+				);
+		}
+
+		if (!jsDocComments.find((c) => c.value.includes('prettier'))) {
+			// overring existing comments
+			if (jsDocComments.length) jsDocComments.splice(0, jsDocComments.length);
+			jsDocComments.push({
+				type: 'CommentBlock',
+				value: "* @type {import('prettier').Config}",
+				leading: true
+			});
+		}
+		return generateCode();
+	} else if (filename === '.prettierrc') {
+		const { data, generateCode } = parseJson(content);
+		if (Object.keys(data).length === 0) {
+			// we'll only set these defaults if there is no pre-existing config
+			data.useTabs = false;
+		}
+		return generateCode();
+	} else {
+		throw new Error('Prettier config file must be either `prettier.config.js` or `.prettierrc`');
+	}
 }
