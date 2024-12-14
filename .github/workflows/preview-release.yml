@@ -4,7 +4,7 @@ on:
 
 jobs:
   preview-release:
-    if: github.repository == 'sveltejs/cli'
+    if: github.repository == 'exectx/solid-cli'
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:

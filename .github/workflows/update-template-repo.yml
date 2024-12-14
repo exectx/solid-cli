@@ -7,7 +7,7 @@ permissions: {}
 jobs:
   release:
     # prevents this action from running on forks
-    if: github.repository == 'sveltejs/cli'
+    if: github.repository == 'exectx/solid-cli'
     name: Update template
     runs-on: ubuntu-latest
     steps:
