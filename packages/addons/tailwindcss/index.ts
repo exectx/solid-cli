@@ -1,7 +1,8 @@
-import { defineAddon, defineAddonOptions, log } from '@sveltejs/cli-core';
+import { defineAddon, defineAddonOptions, log, Walker } from '@sveltejs/cli-core';
 import { addImports } from '@sveltejs/cli-core/css';
 import { array, common, exports, imports, object, type AstTypes } from '@sveltejs/cli-core/js';
-import { parseCss, parseScript } from '@sveltejs/cli-core/parsers';
+import { parseCss, parseJson, parseScript } from '@sveltejs/cli-core/parsers';
+import fs from 'node:fs';
 
 type Plugin = {
 	id: string;
@@ -46,7 +47,7 @@ export default defineAddon({
 	shortDescription: 'css framework',
 	homepage: 'https://tailwindcss.com',
 	options,
-	run: ({ sv, options, typescript, dependencyVersion }) => {
+	run: ({ sv, options, cwd, typescript, dependencyVersion }) => {
 		const ext = typescript ? 'ts' : 'js';
 		const prettierInstalled = Boolean(dependencyVersion('prettier'));
 
@@ -144,37 +145,73 @@ export default defineAddon({
 		});
 
 		if (dependencyVersion('prettier')) {
-			sv.file('prettier.config.js', (content) => {
-				const { ast, generateCode } = parseScript(content);
-				// TODO: more checks
-				const PLUGIN_NAME = 'prettier-plugin-tailwindcss';
-				const defaultExport = ast.body.find(
-					(node) =>
-						node.type === 'ExportDefaultDeclaration' && node.declaration.type === 'ObjectExpression'
-				) as AstTypes.ExportDefaultDeclaration;
-				if (!defaultExport) {
-					log.error('Failed to find default export in prettier config');
-				}
-				const prettierConfig = defaultExport.declaration as AstTypes.ObjectExpression;
-				const pluginsArray = object.property(prettierConfig, 'plugins', array.createEmpty());
-				if (!pluginsArray.elements.find((e) => e?.type === 'Literal' && e.value === PLUGIN_NAME)) {
-					const hasJsDoc = defaultExport.comments
-						?.at(0)
-						?.value.includes("import('prettier-plugin-tailwindcss').PluginOptions");
-					if (!hasJsDoc) {
-						defaultExport.comments = [
-							{
-								type: 'CommentBlock',
-								value:
-									"* @type {import('prettier').Config & import('prettier-plugin-tailwindcss').PluginOptions}",
-								leading: true
-							}
-						];
-					}
-					array.push(pluginsArray, common.createLiteral(PLUGIN_NAME));
-				}
-				return generateCode();
+			let prettierConfigFile: string | undefined;
+			if (fs.existsSync(`${cwd}/prettier.config.js`)) prettierConfigFile = 'prettier.config.js';
+			if (!prettierConfigFile && fs.existsSync(`${cwd}/.prettierrc`))
+				prettierConfigFile = '.prettierrc';
+			prettierConfigFile ??= 'prettier.config.js';
+
+			sv.file(prettierConfigFile, (content) => {
+				return handlePrettierTailwindConfig(prettierConfigFile, content);
 			});
 		}
 	}
 });
+
+function handlePrettierTailwindConfig(filename: string, content: string) {
+	const PLUGIN_NAME = 'prettier-plugin-tailwindcss';
+	if (filename === 'prettier.config.js') {
+		const { ast, generateCode } = parseScript(content);
+		const prettierConfig = exports.defaultExport(ast, object.createEmpty());
+		if (prettierConfig.value.type !== 'ObjectExpression') {
+			log.error('Expected existing prettier config to be of type `ObjectExpression`');
+			return content;
+		}
+		const defaultExport = ast.body.find((s) => s.type === 'ExportDefaultDeclaration')!;
+		let jsDocComments = defaultExport.comments;
+		if (common.hasNode(defaultExport, prettierConfig.value)) {
+			defaultExport.comments ??= [];
+			jsDocComments = defaultExport.comments;
+		} else {
+			Walker.walk(
+				ast as AstTypes.ASTNode,
+				{},
+				{
+					VariableDeclaration(node, { next, stop }) {
+						if (common.hasNode(node, prettierConfig.value)) {
+							node.comments ??= [];
+							jsDocComments = node.comments;
+							stop();
+						}
+						next();
+					}
+				}
+			);
+			if (!jsDocComments)
+				throw new Error(
+					'Could not find prettier config variable declaration, This state should not be possible'
+				);
+		}
+		if (!jsDocComments.find((c) => c.value.includes('prettier-plugin-tailwindcss'))) {
+			// overring existing comments
+			if (jsDocComments.length) jsDocComments.splice(0, jsDocComments.length);
+			jsDocComments.push({
+				type: 'CommentBlock',
+				value:
+					"* @type {import('prettier').Config & import('prettier-plugin-tailwindcss').PluginOptions}",
+				leading: true
+			});
+		}
+		const plugins = object.property(prettierConfig.value, 'plugins', array.createEmpty());
+		array.push(plugins, PLUGIN_NAME);
+		return generateCode();
+	} else if (filename === '.prettierrc') {
+		const { data, generateCode } = parseJson(content);
+		data.plugins ??= [];
+		const plugins: string[] = data.plugins;
+		if (!plugins.includes(PLUGIN_NAME)) plugins.push(PLUGIN_NAME);
+		return generateCode();
+	} else {
+		throw new Error('Prettier config file must be either `prettier.config.js` or `.prettierrc`');
+	}
+}
