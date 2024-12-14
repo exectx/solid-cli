@@ -34,8 +34,8 @@ npx sc2
 | mdx          | ⚠️         | ⚠️         | ❌    |
 | paraglide    | ✅         | ✅         | ❌    |
 | playwright   | ✅         | ✅         | ❌    |
-| prettier     | ⚠️         | ⚠️         | ❌    |
-| tailwindcss  | ⚠️         | ⚠️         | ❌    |
+| prettier     | ✅         | ✅         | ❌    |
+| tailwindcss  | ✅         | ✅         | ❌    |
 | vitest-addon | ✅         | ✅         | ❌    |
 
 ## License
