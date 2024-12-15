@@ -4,10 +4,11 @@ name: Docs preview delete request
 on:
   pull_request_target:
     branches:
-      - main
+      - solid
     types: [closed]
 
 jobs:
+  if: false
   dispatch:
     runs-on: ubuntu-latest
     steps:
