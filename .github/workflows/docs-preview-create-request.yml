@@ -4,9 +4,10 @@ name: Docs preview create request
 on:
   pull_request_target:
     branches:
-      - main
+      - solid
 
 jobs:
+  if: false
   dispatch:
     runs-on: ubuntu-latest
     steps:
